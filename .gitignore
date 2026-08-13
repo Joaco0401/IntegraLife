@@ -1,0 +1,12 @@
+.env
+credenciales_google.json
+token_google.json
+clave.txt
+venv/
+__pycache__/
+*.pyc
+fotos/
+audios/
+respaldos/
+respaldo*.sql
+rutas_panel_RESPALDO.py
