@@ -101,8 +101,6 @@ PAGINA = """<!DOCTYPE html>
   .hoy-titulo { font-size: .8rem; font-weight: 700; color: #FFFFFF; text-transform: uppercase;
                 background: #26529E; padding: .45rem .9rem; border-radius: 2px;
                 letter-spacing: .06em; margin-bottom: .7rem; display: flex; align-items: center; gap: .5rem; }
-  .hoy-saludo { grid-column: 1/-1; font-size: 1.35rem; font-weight: 800; color: #363F4C; }
-  .hoy-fecha { grid-column: 1/-1; font-size: .88rem; color: #7B8494; margin-bottom: .3rem; }
   .hoy-evento { background: white; border: 1px solid #E3E7EE; border-radius: 2px;
                 padding: .9rem 1.1rem; margin-bottom: .6rem;
                 box-shadow: 0 1px 3px rgba(54,63,76,.10); border-left: 5px solid #26529E;
@@ -122,6 +120,31 @@ PAGINA = """<!DOCTYPE html>
   .hoy-frio:hover { background: #F5F7FA; }
   .hoy-frio .avatar { width: 30px; height: 30px; font-size: .7rem; margin: 0; }
   .hoy-vacio { color: #A9B9D3; font-size: .85rem; font-style: italic; padding: .5rem 0 1rem; }
+  .brief { grid-column: 1/-1; background: white; border: 1px solid #E3E7EE;
+           border-top: 4px solid #26529E; border-radius: 3px; padding: 1.4rem 1.5rem;
+           margin-bottom: 1rem; }
+  .brief-cabecera { display: flex; justify-content: space-between; align-items: flex-start;
+                    gap: 1rem; flex-wrap: wrap; margin-bottom: .8rem; }
+  .brief-marca { font-size: .68rem; font-weight: 800; color: #26529E; letter-spacing: .1em;
+                 text-transform: uppercase; margin-bottom: .3rem; }
+  .brief h3 { font-size: 1.18rem; color: #363F4C; margin-bottom: .1rem; }
+  .brief .resumen { font-size: .95rem; line-height: 1.6; color: #363F4C; margin: .9rem 0; }
+  .brief-bloque { margin-top: 1.1rem; }
+  .brief-bloque h5 { font-size: .72rem; font-weight: 800; text-transform: uppercase;
+                     letter-spacing: .06em; color: #7B8494; margin-bottom: .5rem; }
+  .brief-punto { display: flex; gap: .6rem; align-items: flex-start; font-size: .9rem;
+                 line-height: 1.5; padding: .4rem 0; border-bottom: 1px solid #F0F2F6; }
+  .brief-punto:last-child { border-bottom: none; }
+  .brief-punto::before { content: "\25B8"; color: #26529E; font-weight: 800; flex-shrink: 0; }
+  .btn-brief { border: none; background: #26529E; color: white; border-radius: 3px;
+               padding: .5rem 1.1rem; cursor: pointer; font-size: .84rem; font-weight: 700;
+               white-space: nowrap; }
+  .btn-brief:hover { background: #1d4080; }
+  .btn-brief:disabled { opacity: .55; cursor: wait; }
+  .btn-brief.secundario { background: #E3EAF5; color: #26529E; }
+  .btn-brief.secundario:hover { background: #D3DDEC; }
+  .brief-pie { font-size: .72rem; color: #A9B9D3; margin-top: 1rem;
+               border-top: 1px solid #F0F2F6; padding-top: .6rem; }
   .hoy-titulo.plegable { cursor: pointer; user-select: none; }
   .hoy-titulo.plegable:hover { color: #363F4C; }
   .flecha-pleg { transition: transform .2s; display: inline-block; font-size: .7rem; }
@@ -2422,16 +2445,8 @@ async function cargarHoy() {
   contenido.innerHTML = "<div class='vacio'>Cargando tu día…</div>";
   const d = await (await fetch("/hoy?org=" + filtroOrg)).json();
   const ahora = new Date();
-  const dias = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
-  const meses = ["enero","febrero","marzo","abril","mayo","junio","julio",
-                 "agosto","septiembre","octubre","noviembre","diciembre"];
-  const hora = ahora.getHours();
-  const saludo = hora < 12 ? "Buenos días" : (hora < 20 ? "Buenas tardes" : "Buenas noches");
-  const nombre = (window.perfilNombre || "").split(" ")[0] || "";
-
   const hoyStr = ahora.toDateString();
   const deHoy = d.eventos.filter(e => new Date(e.inicio).toDateString() === hoyStr);
-  const deManana = d.eventos.filter(e => new Date(e.inicio).toDateString() !== hoyStr);
 
   const pintarEvento = e => {
     const f = new Date(e.inicio);
@@ -2453,21 +2468,12 @@ async function cargarHoy() {
   };
 
   let html = `
-    <div class="hoy-saludo">${saludo}${nombre ? ", " + nombre : ""}</div>
-    <div class="hoy-fecha">${dias[ahora.getDay()]} ${ahora.getDate()} de ${meses[ahora.getMonth()]}</div>
-
-    <div class="contador-org">
-      <div class="kpi"><div class="num">${deHoy.length}</div><div class="lbl">Hoy en agenda</div></div>
-      <div class="kpi"><div class="num">${d.total_pendientes}</div><div class="lbl">Pendientes</div></div>
-      <div class="kpi"><div class="num">${d.total_contactos}</div><div class="lbl">Contactos</div></div>
-    </div>
+    <div id="caja-brief"></div>
 
     <div class="hoy-seccion">
-      <div class="hoy-titulo">📅 Agenda de hoy</div>
+      <div class="hoy-titulo">Agenda de hoy</div>
       ${deHoy.length ? deHoy.map(pintarEvento).join("")
         : "<div class='hoy-vacio'>No tienes eventos agendados para hoy</div>"}
-      ${deManana.length ? `<div class="hoy-titulo" style="margin-top:1.2rem">Mañana</div>
-        ${deManana.map(pintarEvento).join("")}` : ""}
     </div>
 
     <div class="hoy-seccion">
@@ -2493,6 +2499,77 @@ async function cargarHoy() {
     </div>`;
 
   contenido.innerHTML = html;
+  cargarBrief();
+}
+
+async function cargarBrief() {
+  const caja = document.getElementById("caja-brief");
+  if (!caja) return;
+  let b;
+  try {
+    b = await (await fetch("/brief")).json();
+  } catch (e) { return; }
+
+  if (!b.existe) {
+    caja.innerHTML = `
+      <div class="brief">
+        <div class="brief-cabecera">
+          <div>
+            <div class="brief-marca">Brief matutino</div>
+            <h3>Aún no se ha generado el brief de hoy</h3>
+            <div class="meta" style="margin-top:.3rem">Se genera solo cada mañana a las 6:00. Puedes pedirlo ahora.</div>
+          </div>
+          <button class="btn-brief" id="btn-brief" onclick="generarBrief()">Generar ahora</button>
+        </div>
+      </div>`;
+    return;
+  }
+  pintarBrief(b);
+}
+
+function pintarBrief(b) {
+  const caja = document.getElementById("caja-brief");
+  if (!caja) return;
+  const hora = b.generado_en ? b.generado_en.slice(11, 16) : "";
+  caja.innerHTML = `
+    <div class="brief">
+      <div class="brief-cabecera">
+        <div>
+          <div class="brief-marca">Brief matutino</div>
+          <h3>${b.saludo || ""}</h3>
+          <div class="meta">${b.fecha_texto || ""}</div>
+        </div>
+        <button class="btn-brief secundario" id="btn-brief" onclick="generarBrief()">↻ Actualizar</button>
+      </div>
+
+      ${b.resumen ? `<div class="resumen">${b.resumen}</div>` : ""}
+
+      ${(b.puntos_clave || []).length ? `
+        <div class="brief-bloque">
+          <h5>No puedes olvidar</h5>
+          ${b.puntos_clave.map(p => `<div class="brief-punto">${p}</div>`).join("")}
+        </div>` : ""}
+
+      <div class="brief-pie">Generado por Claude${hora ? " a las " + hora : ""} · ${b.total_eventos || 0} evento(s), ${b.total_pendientes || 0} pendiente(s)</div>
+    </div>`;
+}
+
+async function generarBrief() {
+  const btn = document.getElementById("btn-brief");
+  if (btn) { btn.disabled = true; btn.textContent = "✦ Escribiendo…"; }
+  try {
+    const r = await fetch("/brief/generar", { method: "POST" });
+    if (!r.ok) throw new Error("fallo");
+    const b = await r.json();
+    b.existe = true;
+    b.generado_en = new Date().toISOString();
+    pintarBrief(b);
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Reintentar"; }
+    const caja = document.getElementById("caja-brief");
+    if (caja) caja.insertAdjacentHTML("beforeend",
+      "<div class='msj-importar mal' style='display:block;margin-top:.5rem'>No se pudo generar el brief. Revisa la conexión o el crédito de la API.</div>");
+  }
 }
 
 function alternarPendientes() {

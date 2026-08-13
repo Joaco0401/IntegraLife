@@ -22,6 +22,7 @@ import rutas_organizacion
 import rutas_perfil
 import rutas_voz
 import rutas_hoy
+import rutas_brief
 
 DESCRIPCION = """
 **Integra Life** — tu memoria ejecutiva.
@@ -34,12 +35,13 @@ Plataforma de gestión de relaciones con inteligencia artificial.
 ETIQUETAS = [
     {"name": "Panel", "description": "Interfaz visual de la plataforma."},
     {"name": "Hoy", "description": "Panorama del día: agenda, pendientes y relaciones."},
+    {"name": "Brief", "description": "Resumen ejecutivo del día generado por Claude."},
     {"name": "Contactos", "description": "Personas con las que te relacionas."},
     {"name": "Empresas", "description": "Organizaciones de tus contactos."},
     {"name": "Interacciones", "description": "Notas con resumen automático de Claude."},
     {"name": "Calendario", "description": "Sincronización con Google Calendar."},
     {"name": "Importar", "description": "Carga de datos desde archivos."},
-    {"name": "Notas de voz", "description": "Dictados que se convierten en contexto de contactos y empresas."},
+    {"name": "Notas de voz", "description": "Dictados que se convierten en contexto."},
     {"name": "Organizaciones", "description": "Organizaciones propias y tareas consolidadas."},
     {"name": "Perfil", "description": "Datos del usuario logueado."},
     {"name": "Acceso", "description": "Login y cierre de sesión."},
@@ -47,10 +49,7 @@ ETIQUETAS = [
 
 
 def sincronizar_calendario_automatico():
-    """Job periodico: sincroniza el calendario de Google al usuario rodrigo.
-
-    Respeta los eventos que el usuario elimino (tabla eventos_ocultos).
-    """
+    """Job periodico: sincroniza el calendario de Google al usuario rodrigo."""
     from rutas_calendario import sincronizar_para_usuario
 
     db = SesionLocal()
@@ -71,8 +70,11 @@ def sincronizar_calendario_automatico():
 
 @asynccontextmanager
 async def ciclo_vida(app: FastAPI):
+    from rutas_brief import generar_brief_automatico
+
     programador = BackgroundScheduler()
     programador.add_job(sincronizar_calendario_automatico, "interval", minutes=5)
+    programador.add_job(generar_brief_automatico, "cron", hour=6, minute=0)
     programador.start()
     sincronizar_calendario_automatico()
     yield
@@ -81,7 +83,7 @@ async def ciclo_vida(app: FastAPI):
 
 app = FastAPI(
     title="Integra Life",
-    version="1.0.0",
+    version="1.1.0",
     description=DESCRIPCION,
     openapi_tags=ETIQUETAS,
     lifespan=ciclo_vida,
@@ -138,6 +140,7 @@ def quien_soy(request: Request):
 
 app.include_router(rutas_panel.router)
 app.include_router(rutas_hoy.router)
+app.include_router(rutas_brief.router)
 app.include_router(rutas_contactos.router)
 app.include_router(rutas_empresas.router)
 app.include_router(rutas_interacciones.router)

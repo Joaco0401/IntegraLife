@@ -17,8 +17,7 @@ def _limpiar(texto: str) -> str:
 
 
 def _rescatar_json_truncado(texto: str):
-    """Si la respuesta quedo cortada, recupera los objetos completos que si
-    alcanzaron a escribirse, descartando el ultimo incompleto."""
+    """Si la respuesta quedo cortada, recupera los objetos completos."""
     resultado = {"empresas": [], "contactos": [], "eventos": []}
     for clave in resultado:
         inicio = texto.find('"' + clave + '"')
@@ -109,7 +108,7 @@ Analiza el siguiente contenido de un archivo y extrae:
 CONTENIDO DEL ARCHIVO:
 {texto_archivo[:15000]}
 
-La fecha de hoy es 2026-08-11 (formato AAAA-MM-DD). Usa esto para resolver
+La fecha de hoy es 2026-08-13 (formato AAAA-MM-DD). Usa esto para resolver
 fechas relativas como "el viernes" o "la proxima semana".
 
 IMPORTANTE sobre la columna o campo "Organizacion":
@@ -147,8 +146,7 @@ Reglas de formato (IMPORTANTES para que la respuesta no se corte):
 Reglas de contenido:
 - Si un dato no aparece, usa null. NO inventes datos.
 - Si una tarea tiene responsable, DEBE aparecer en las notas de ese contacto.
-- Ignora las filas de ejemplo o de ayuda de las plantillas (las que explican
-  que va en cada columna).
+- Ignora las filas de ejemplo o de ayuda de las plantillas.
 - Si no hay elementos de alguna categoria, devuelve lista vacia."""
 
     respuesta = cliente.messages.create(
@@ -166,10 +164,7 @@ Reglas de contenido:
 
 
 def analizar_nota_voz(transcripcion: str, contactos_conocidos: list, empresas_conocidas: list) -> dict:
-    """Analiza la transcripcion de una nota de voz y distribuye la informacion.
-
-    Devuelve que guardar en cada contacto y en cada empresa mencionada.
-    """
+    """Analiza la transcripcion de una nota de voz y distribuye la informacion."""
     lista_contactos = ", ".join(contactos_conocidos[:80]) or "(ninguno registrado aun)"
     lista_empresas = ", ".join(empresas_conocidas[:50]) or "(ninguna registrada aun)"
 
@@ -186,7 +181,7 @@ CONTACTOS YA REGISTRADOS EN EL SISTEMA:
 EMPRESAS YA REGISTRADAS EN EL SISTEMA:
 {lista_empresas}
 
-La fecha de hoy es 2026-08-11 (formato AAAA-MM-DD). Usa esto para resolver
+La fecha de hoy es 2026-08-13 (formato AAAA-MM-DD). Usa esto para resolver
 fechas relativas como "el viernes" o "la proxima semana".
 
 Responde SOLO un JSON valido con esta estructura exacta, sin explicaciones
@@ -217,8 +212,8 @@ ni markdown:
 Reglas:
 - Si un nombre se parece a uno ya registrado, usa EXACTAMENTE el nombre registrado
   y marca es_nuevo/es_nueva como false.
-- La informacion de negocio (planes de expansion, cifras, decisiones estrategicas)
-  va en la empresa. Lo relacional y los compromisos van en el contacto.
+- La informacion de negocio (planes, cifras, decisiones estrategicas) va en la
+  empresa. Lo relacional y los compromisos van en el contacto.
 - Si la nota menciona una persona pero no su empresa, deja empresa_nombre en null.
 - SE BREVE: cada resumen maximo 250 caracteres, sin saltos de linea.
 - No inventes datos que no esten en la transcripcion.
@@ -235,4 +230,78 @@ Reglas:
         "contactos": datos.get("contactos", []),
         "empresas": datos.get("empresas", []),
         "eventos": datos.get("eventos", []),
+    }
+
+
+def generar_brief_diario(nombre_usuario: str, fecha_texto: str, eventos: list,
+                         pendientes: list, organizaciones: list) -> dict:
+    """Escribe el resumen ejecutivo del dia."""
+    if not eventos and not pendientes:
+        return {
+            "saludo": f"Buenos dias, {nombre_usuario}",
+            "resumen": "No tienes eventos ni pendientes registrados para hoy.",
+            "puntos_clave": [],
+            "sugerencias": [],
+        }
+
+    texto_eventos = "\n".join(
+        f"- {e['hora']} · {e['titulo']}"
+        f"{' en ' + e['ubicacion'] if e.get('ubicacion') else ''}"
+        f"{' con ' + ', '.join(e['asistentes']) if e.get('asistentes') else ''}"
+        f"{' | contexto: ' + e['contexto'] if e.get('contexto') else ''}"
+        for e in eventos
+    ) or "(sin eventos agendados)"
+
+    texto_pendientes = "\n".join(
+        f"- {p['texto']} (con {p['contacto']}"
+        f"{', ' + p['empresa'] if p.get('empresa') else ''}"
+        f", registrado hace {p['dias']} dias)"
+        for p in pendientes[:20]
+    ) or "(sin pendientes abiertos)"
+
+    texto_orgs = ", ".join(organizaciones) or "sin organizaciones definidas"
+
+    prompt = f"""Eres el asistente ejecutivo de {nombre_usuario}, un empresario
+con poco tiempo que necesita llegar preparado a su dia.
+
+Hoy es {fecha_texto}. Trabaja en: {texto_orgs}.
+
+AGENDA DE HOY:
+{texto_eventos}
+
+PENDIENTES ABIERTOS:
+{texto_pendientes}
+
+Escribe su brief matutino. Responde SOLO un JSON valido con esta estructura,
+sin explicaciones ni markdown:
+{{
+  "saludo": "saludo breve y personal",
+  "resumen": "2-4 frases con como se ve el dia: cuantas reuniones, cuales son
+              las mas importantes y por que",
+  "puntos_clave": ["lo que no puede olvidar hoy, maximo 5, en frases cortas
+                    y accionables"],
+  "sugerencias": ["recomendaciones concretas: a quien retomar, que preparar
+                   antes de una reunion, que compromiso esta demorado. Maximo 3"]
+}}
+
+Reglas:
+- Tono directo y profesional, sin adornos ni frases de relleno.
+- Menciona nombres propios de personas y empresas cuando aporte.
+- Si un pendiente lleva mucho tiempo abierto, senalalo.
+- Si una reunion de hoy tiene compromisos pendientes con esa persona, avisalo:
+  es lo mas valioso del brief.
+- Habla en segunda persona (tu tienes, deberias).
+- Se breve: cada punto maximo 140 caracteres."""
+
+    respuesta = cliente.messages.create(
+        model=MODELO,
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    datos = _extraer_json(respuesta.content[0].text)
+    return {
+        "saludo": datos.get("saludo", f"Buenos dias, {nombre_usuario}"),
+        "resumen": datos.get("resumen", ""),
+        "puntos_clave": datos.get("puntos_clave", []),
+        "sugerencias": datos.get("sugerencias", []),
     }
