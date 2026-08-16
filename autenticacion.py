@@ -1,11 +1,11 @@
 """Autenticacion multiusuario con claves cifradas en la base de datos."""
 import os
 
-import bcrypt
 from dotenv import load_dotenv
 from fastapi import Request, HTTPException
 from fastapi.responses import HTMLResponse
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from passlib.hash import bcrypt
 from sqlalchemy import text
 
 from database import SesionLocal
@@ -18,21 +18,6 @@ DURACION_SESION = 60 * 60 * 24 * 30  # 30 dias
 firmador = URLSafeTimedSerializer(SECRETO)
 
 RUTAS_LIBRES = {"/login", "/entrar", "/salud", "/favicon.ico"}
-
-
-def cifrar_clave(clave: str) -> str:
-    """Genera el hash bcrypt de una clave."""
-    return bcrypt.hashpw(clave.encode("utf-8")[:72], bcrypt.gensalt()).decode("utf-8")
-
-
-def verificar_clave(clave: str, hash_guardado: str) -> bool:
-    """Compara una clave con su hash."""
-    try:
-        return bcrypt.checkpw(
-            clave.encode("utf-8")[:72], hash_guardado.encode("utf-8")
-        )
-    except Exception:
-        return False
 
 
 def validar_credenciales(usuario: str, clave: str):
@@ -55,7 +40,10 @@ def validar_credenciales(usuario: str, clave: str):
         ).fetchone()
         if fila is None or not fila.activo or not fila.password_hash:
             return None
-        if not verificar_clave(clave, fila.password_hash):
+        try:
+            if not bcrypt.verify(clave, fila.password_hash):
+                return None
+        except Exception:
             return None
         return fila.username, str(fila.id)
     finally:
@@ -70,10 +58,22 @@ def cambiar_clave(usuario_id: str, clave_nueva: str) -> bool:
     try:
         db.execute(
             text("UPDATE usuarios SET password_hash = :h WHERE id = :id"),
-            {"h": cifrar_clave(clave_nueva), "id": usuario_id},
+            {"h": bcrypt.hash(clave_nueva), "id": usuario_id},
         )
         db.commit()
         return True
+    finally:
+        db.close()
+
+
+def usuario_existe(username: str) -> bool:
+    db = SesionLocal()
+    try:
+        fila = db.execute(
+            text("SELECT id FROM usuarios WHERE username = :u"),
+            {"u": username.strip().lower()},
+        ).fetchone()
+        return fila is not None
     finally:
         db.close()
 

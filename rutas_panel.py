@@ -50,10 +50,73 @@ PAGINA = """<!DOCTYPE html>
   .lateral-pie { padding: .9rem 1.2rem; border-top: 1px solid #E3E7EE; font-size: .74rem;
                  color: #7B8494; }
   .titulo-vista { font-size: 1.15rem; font-weight: 700; color: #363F4C; }
+  .cargando-voz { text-align: center; padding: 2.2rem 1rem; }
+  .girador { width: 46px; height: 46px; margin: 0 auto 1.2rem;
+             border: 4px solid #E3E7EE; border-top-color: #26529E;
+             border-radius: 50%; animation: girar .9s linear infinite; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+  .cargando-texto { font-size: 1rem; font-weight: 700; color: #26529E; }
+  .cargando-sub { font-size: .82rem; color: #7B8494; margin-top: .35rem; }
+
   @media (max-width: 620px) {
-    .lateral { width: 82%; max-width: 300px; }
-    body { padding: 1rem; }
-    .btn-flotante { right: 1rem; bottom: 1rem; width: 58px; height: 58px; }
+    body { padding: .8rem; }
+    .lateral { width: 84%; max-width: 300px; }
+    .btn-flotante { right: .9rem; bottom: .9rem; width: 58px; height: 58px; font-size: 1.4rem; }
+
+    header { gap: .6rem; padding-bottom: .7rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.05rem; }
+    .sub { font-size: .72rem; }
+    .logo { width: 38px; height: 38px; font-size: .95rem; }
+    .btn-menu { width: 40px; height: 40px; }
+    .btn-usuario { padding: .4rem .7rem; font-size: .78rem; max-width: 120px;
+                   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .barra { gap: .5rem; margin-bottom: .9rem; }
+    .titulo-vista { font-size: 1rem; }
+    .btn-nuevo { padding: .5rem .9rem; font-size: .82rem; }
+
+    .grid { grid-template-columns: 1fr; gap: .7rem; }
+    .tarjeta { padding: .9rem 1rem; }
+    .tarjeta h3 { font-size: .96rem; }
+
+    .barra-busqueda, #selector-org { flex-direction: column; align-items: stretch; }
+    .filtro-org, .buscador { max-width: 100%; width: 100%; }
+    .lbl-filtro { font-size: .7rem; }
+
+    #velo { padding: 0; align-items: stretch; }
+    .ficha { max-width: 100%; min-height: 100vh; border-radius: 0; border-top: none;
+             padding: 1.1rem 1rem 4rem; }
+    .ficha h2 { font-size: 1.08rem; }
+    .cerrar { padding: .5rem .85rem; font-size: .82rem; }
+
+    .dos-cols { grid-template-columns: 1fr; }
+    .rev-campos { grid-template-columns: 1fr; }
+    .ventanas { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .ventana-btn { padding: .55rem .7rem; font-size: .8rem; white-space: nowrap; }
+
+    input[type=text], select, textarea { font-size: 16px; padding: .7rem .8rem; }
+    .btn-guardar, .btn-nuevo, .btn-voz, .btn-brief { padding: .7rem 1.1rem; }
+
+    .brief { padding: 1.1rem 1rem; }
+    .brief h3 { font-size: 1.02rem; }
+    .brief .resumen { font-size: .9rem; }
+    .brief-cabecera { flex-direction: column; align-items: stretch; gap: .6rem; }
+    .btn-brief { width: 100%; }
+
+    .btn-grabar { width: 112px; height: 112px; font-size: .76rem; }
+    .controles-voz { flex-wrap: wrap; justify-content: center; }
+    .zona-voz, .zona-importar { padding: 1.1rem 1rem; }
+
+    .hoy-evento { flex-direction: column; gap: .3rem; }
+    .hoy-evento .hora-grande { min-width: 0; }
+    .evento-acciones { opacity: 1; }
+    .dato { flex-direction: column; align-items: flex-start; gap: .1rem; }
+    .dato .valor { max-width: 100%; text-align: left; }
+    .kpi-perfil { grid-template-columns: repeat(2, 1fr); }
+    .contador-org { gap: .5rem; }
+    .kpi { flex: 1; padding: .6rem .8rem; }
+    .kpi .num { font-size: 1.15rem; }
+    .tarea-persona { flex-wrap: wrap; }
   }
   .logo { width: 42px; height: 42px; border-radius: 3px;
           background: #26529E;
@@ -1307,23 +1370,38 @@ function detenerGrabacion() {
   grabadora.stop();
 }
 
+function mostrarCargando(texto) {
+  velo.classList.add("abierto");
+  ficha.innerHTML = `
+    <div class="cargando-voz">
+      <div class="girador"></div>
+      <div class="cargando-texto">${texto}</div>
+      <div class="cargando-sub">Esto puede tardar unos segundos</div>
+    </div>`;
+}
+
 async function subirNotaVoz(blob, duracion) {
-  const ids = window.idsVoz || {};
-  const estado = document.getElementById(ids.estado);
   limpiarUIGrabacion("");
-  if (estado) estado.textContent = "✦ Guardando audio y transcribiendo…";
+  mostrarCargando("Guardando audio y transcribiendo…");
 
   const form = new FormData();
   form.append("audio", blob, "nota.webm");
   form.append("duracion", duracion);
   form.append("org", filtroOrg);
-  const r = await fetch("/voz/subir", { method: "POST", body: form });
+  let r;
+  try {
+    r = await fetch("/voz/subir", { method: "POST", body: form });
+  } catch (e) {
+    ficha.innerHTML = `<button class="cerrar" onclick="velo.classList.remove('abierto')">✕ cerrar</button>
+      <h2>Error</h2><div class="msj-importar mal" style="display:block;margin-top:1rem">No se pudo enviar el audio.</div>`;
+    return;
+  }
   if (!r.ok) {
-    if (estado) estado.innerHTML = "<span class='msj-importar mal'>No se pudo guardar el audio</span>";
+    ficha.innerHTML = `<button class="cerrar" onclick="velo.classList.remove('abierto')">✕ cerrar</button>
+      <h2>Error</h2><div class="msj-importar mal" style="display:block;margin-top:1rem">No se pudo guardar el audio.</div>`;
     return;
   }
   const nota = await r.json();
-  if (estado) estado.textContent = "";
   mostrarTranscripcion(nota.id, duracion, nota.transcripcion, nota.aviso);
 }
 
@@ -1344,16 +1422,15 @@ function mostrarTranscripcion(notaId, duracion, transcripcion, aviso) {
       ${aviso ? `<div class="msj-importar mal" style="display:block;margin-bottom:.6rem">${aviso}</div>` : ""}
       <button class="btn-nuevo" id="btn-analizar-voz" onclick="analizarNotaVoz('${notaId}')">Analizar con Claude</button>
       <button class="btn-voz cancelar" style="margin-left:.5rem" onclick="retranscribir('${notaId}')">↻ Volver a transcribir</button>
-      <button class="cerrar" style="float:none;margin-left:.5rem" onclick="${destino ? (destino.tipo === "contacto" ? `abrirFicha('${destino.id}','notas')` : `abrirFichaEmpresa('${destino.id}')`) : "cargarImportar()"}">Descartar</button>
+      <button class="cerrar" style="float:none;margin-left:.5rem" onclick="${destino ? (destino.tipo === "contacto" ? `abrirFicha('${destino.id}','notas')` : `abrirFichaEmpresa('${destino.id}')`) : "velo.classList.remove('abierto'); cargarImportar()"}">Descartar</button>
       <div class="estado-voz" id="estado-analisis"></div>
     </div>`;
-  if (destino) {
-    ficha.innerHTML = `<button class="cerrar" onclick="${destino.tipo === "contacto"
-      ? `abrirFicha('${destino.id}','notas')` : `abrirFichaEmpresa('${destino.id}')`}">← volver</button>
-      <h2>Nota de voz</h2>` + html;
-  } else {
-    contenedor.innerHTML = html;
-  }
+  const volver = destino
+    ? (destino.tipo === "contacto" ? `abrirFicha('${destino.id}','notas')` : `abrirFichaEmpresa('${destino.id}')`)
+    : "velo.classList.remove('abierto'); cargarImportar()";
+  velo.classList.add("abierto");
+  ficha.innerHTML = `<button class="cerrar" onclick="${volver}">✕ cerrar</button>
+    <h2>Nota de voz</h2>` + html;
   const ta = document.getElementById("txt-transcripcion");
   if (ta && !texto) ta.focus();
 }
@@ -1418,16 +1495,23 @@ async function analizarNotaVoz(notaId) {
     await aplicarNotaEnFicha(analisis);
     return;
   }
-  document.getElementById("caja-transcripcion").insertAdjacentHTML("afterend",
-    `<div class="rev-titulo">Resumen de la nota</div>
-     <div class="inter"><p>${analisis.resumen_general || "(sin resumen)"}</p></div>`);
-  const rev = document.createElement("div");
-  rev.id = "revision-voz";
-  document.getElementById("caja-transcripcion").parentNode.appendChild(rev);
-  const original = document.getElementById("revision");
-  if (original) original.id = "revision-old";
-  rev.id = "revision";
-  mostrarRevision();
+  velo.classList.remove("abierto");
+  vista = "importar";
+  document.querySelectorAll(".nav-item").forEach(x => {
+    x.classList.toggle("activa", x.dataset.vista === "importar");
+  });
+  const t = document.getElementById("titulo-vista");
+  if (t) t.textContent = "Importar audio/archivos";
+  cargarImportar();
+  setTimeout(() => {
+    const rev = document.getElementById("revision");
+    if (!rev) return;
+    rev.insertAdjacentHTML("beforeend",
+      `<div class="rev-titulo">Resumen de la nota</div>
+       <div class="inter"><p>${(analisis.resumen_general || "(sin resumen)").replace(/`/g, "")}</p></div>`);
+    mostrarRevision();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, 150);
 }
 
 async function aplicarNotaEnFicha(analisis) {
