@@ -1210,6 +1210,7 @@ async function cargarAgenda() {
 
 function cargarImportar() {
   datosImportados = null;
+  window.contenedorRevision = null;
   contenido.innerHTML = `
     <div class="zona-voz">
       <h3>Grabar nota de voz</h3>
@@ -1544,7 +1545,7 @@ function mostrarRevisionEnModal(analisis) {
       <p>${escaparHTML(analisis.resumen_general || "(sin resumen)")}</p>
     </div>
     <div id="caja-transcripcion-nota"></div>
-    <div id="revision"></div>`;
+    <div id="revision-modal"></div>`;
 
   if (n.id) {
     const audio = document.createElement("audio");
@@ -1565,7 +1566,9 @@ function mostrarRevisionEnModal(analisis) {
     document.getElementById("caja-transcripcion-nota").appendChild(det);
   }
 
+  window.contenedorRevision = "revision-modal";
   mostrarRevision();
+  window.contenedorRevision = null;
   ficha.scrollTop = 0;
 }
 
@@ -1766,7 +1769,7 @@ function validarOrg() {
 }
 
 function mostrarRevision() {
-  const rev = document.getElementById("revision");
+  const rev = document.getElementById(window.contenedorRevision || "revision");
   const orgDetectada = datosImportados.organizacion_id ||
     (filtroOrg !== "todas" && filtroOrg !== "personal" ? filtroOrg : "");
   let html = "";
