@@ -1402,7 +1402,15 @@ async function subirNotaVoz(blob, duracion) {
     return;
   }
   const nota = await r.json();
-  mostrarTranscripcion(nota.id, duracion, nota.transcripcion, nota.aviso);
+
+  if (!nota.transcripcion) {
+    mostrarTranscripcion(nota.id, duracion, nota.transcripcion, nota.aviso);
+    return;
+  }
+
+  window.notaVozActual = { id: nota.id, duracion: duracion, transcripcion: nota.transcripcion };
+  mostrarCargando("Claude está analizando la nota…");
+  await analizarNotaVoz(nota.id, true);
 }
 
 function mostrarTranscripcion(notaId, duracion, transcripcion, aviso) {
@@ -1450,24 +1458,38 @@ async function retranscribir(notaId) {
   if (estado) estado.textContent = "✓ Transcripción actualizada";
 }
 
-async function analizarNotaVoz(notaId) {
-  const texto = document.getElementById("txt-transcripcion").value.trim();
+async function analizarNotaVoz(notaId, automatico) {
+  const campo = document.getElementById("txt-transcripcion");
   const estado = document.getElementById("estado-analisis");
-  if (!texto) { estado.innerHTML = "<span class='msj-importar mal'>Escribe la transcripción para poder analizarla</span>"; return; }
   const btn = document.getElementById("btn-analizar-voz");
-  btn.disabled = true;
-  estado.textContent = "✦ Claude está analizando la nota…";
 
-  await fetch("/voz/" + notaId + "/transcripcion", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ transcripcion: texto }),
-  });
+  let texto = "";
+  if (campo) {
+    texto = campo.value.trim();
+    if (!texto) {
+      if (estado) estado.innerHTML = "<span class='msj-importar mal'>Escribe la transcripción para poder analizarla</span>";
+      return;
+    }
+    if (btn) btn.disabled = true;
+    if (estado) estado.textContent = "✦ Claude está analizando la nota…";
+    await fetch("/voz/" + notaId + "/transcripcion", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcripcion: texto }),
+    });
+  }
+
   const r = await fetch("/voz/" + notaId + "/analizar", { method: "POST" });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
-    estado.innerHTML = `<span class='msj-importar mal'>${err.detail || "Error al analizar"}</span>`;
-    btn.disabled = false;
+    const msg = err.detail || "Error al analizar";
+    if (automatico) {
+      const n = window.notaVozActual || {};
+      mostrarTranscripcion(notaId, n.duracion || 0, n.transcripcion || "", msg);
+    } else if (estado) {
+      estado.innerHTML = `<span class='msj-importar mal'>${msg}</span>`;
+      if (btn) btn.disabled = false;
+    }
     return;
   }
   const analisis = await r.json();
@@ -1495,23 +1517,29 @@ async function analizarNotaVoz(notaId) {
     await aplicarNotaEnFicha(analisis);
     return;
   }
-  velo.classList.remove("abierto");
-  vista = "importar";
-  document.querySelectorAll(".nav-item").forEach(x => {
-    x.classList.toggle("activa", x.dataset.vista === "importar");
-  });
-  const t = document.getElementById("titulo-vista");
-  if (t) t.textContent = "Importar audio/archivos";
-  cargarImportar();
-  setTimeout(() => {
-    const rev = document.getElementById("revision");
-    if (!rev) return;
-    rev.insertAdjacentHTML("beforeend",
-      `<div class="rev-titulo">Resumen de la nota</div>
-       <div class="inter"><p>${(analisis.resumen_general || "(sin resumen)").replace(/`/g, "")}</p></div>`);
-    mostrarRevision();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, 150);
+  mostrarRevisionEnModal(analisis);
+}
+
+function mostrarRevisionEnModal(analisis) {
+  const n = window.notaVozActual || {};
+  velo.classList.add("abierto");
+  ficha.innerHTML = `
+    <button class="cerrar" onclick="velo.classList.remove('abierto'); cargarImportar()">✕ cerrar</button>
+    <h2>Revisa lo que encontró Claude</h2>
+    ${n.id ? `<audio controls src="/voz/${n.id}/audio" style="width:100%;margin-top:.9rem"></audio>` : ""}
+    <div class="inter" style="margin-top:.9rem">
+      <div class="fecha">Resumen de la nota</div>
+      <p>${(analisis.resumen_general || "(sin resumen)").replace(/`/g, "")}</p>
+    </div>
+    ${n.transcripcion ? `<details style="margin-top:.6rem">
+      <summary style="cursor:pointer;font-size:.82rem;color:#26529E;font-weight:700">Ver transcripción</summary>
+      <div class="meta" style="margin-top:.5rem;line-height:1.5">${n.transcripcion.replace(/</g, "&lt;")}</div>
+      <button class="btn-voz cancelar" style="margin-top:.5rem"
+        onclick="mostrarTranscripcion('${n.id}', ${n.duracion || 0}, ${JSON.stringify(n.transcripcion || "")}, null)">✎ Corregir y volver a analizar</button>
+    </details>` : ""}
+    <div id="revision"></div>`;
+  mostrarRevision();
+  ficha.scrollTop = 0;
 }
 
 async function aplicarNotaEnFicha(analisis) {
@@ -1960,7 +1988,10 @@ async function confirmarImportacion() {
     (errores ? " · " + errores + " con error" : "");
 
   cargarOrganizaciones();
-  setTimeout(() => cargarImportar(), 4000);
+  setTimeout(() => {
+    velo.classList.remove("abierto");
+    cargarImportar();
+  }, 3000);
 }
 
 async function abrirFormNuevo() {
@@ -2506,7 +2537,10 @@ document.addEventListener("click", cerrarMenuUsuario);
 function grabarRapido() {
   destinoVoz = null;
   irAVista("importar");
-  setTimeout(() => alternarGrabacion(), 350);
+  setTimeout(() => {
+    const btn = document.getElementById("btn-grabar");
+    if (btn) btn.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, 250);
 }
 
 function diasDesde(iso) {
