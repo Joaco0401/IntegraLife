@@ -1520,24 +1520,51 @@ async function analizarNotaVoz(notaId, automatico) {
   mostrarRevisionEnModal(analisis);
 }
 
+function escaparHTML(t) {
+  return (t || "").toString()
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function corregirTranscripcion() {
+  const n = window.notaVozActual || {};
+  if (!n.id) return;
+  mostrarTranscripcion(n.id, n.duracion || 0, n.transcripcion || "", null);
+}
+
 function mostrarRevisionEnModal(analisis) {
   const n = window.notaVozActual || {};
   velo.classList.add("abierto");
   ficha.innerHTML = `
     <button class="cerrar" onclick="velo.classList.remove('abierto'); cargarImportar()">✕ cerrar</button>
     <h2>Revisa lo que encontró Claude</h2>
-    ${n.id ? `<audio controls src="/voz/${n.id}/audio" style="width:100%;margin-top:.9rem"></audio>` : ""}
+    <div id="caja-audio-nota"></div>
     <div class="inter" style="margin-top:.9rem">
       <div class="fecha">Resumen de la nota</div>
-      <p>${(analisis.resumen_general || "(sin resumen)").replace(/`/g, "")}</p>
+      <p>${escaparHTML(analisis.resumen_general || "(sin resumen)")}</p>
     </div>
-    ${n.transcripcion ? `<details style="margin-top:.6rem">
-      <summary style="cursor:pointer;font-size:.82rem;color:#26529E;font-weight:700">Ver transcripción</summary>
-      <div class="meta" style="margin-top:.5rem;line-height:1.5">${n.transcripcion.replace(/</g, "&lt;")}</div>
-      <button class="btn-voz cancelar" style="margin-top:.5rem"
-        onclick="mostrarTranscripcion('${n.id}', ${n.duracion || 0}, ${JSON.stringify(n.transcripcion || "")}, null)">✎ Corregir y volver a analizar</button>
-    </details>` : ""}
+    <div id="caja-transcripcion-nota"></div>
     <div id="revision"></div>`;
+
+  if (n.id) {
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.src = "/voz/" + n.id + "/audio";
+    audio.style.width = "100%";
+    audio.style.marginTop = ".9rem";
+    document.getElementById("caja-audio-nota").appendChild(audio);
+  }
+
+  if (n.transcripcion) {
+    const det = document.createElement("details");
+    det.style.marginTop = ".6rem";
+    det.innerHTML = `
+      <summary style="cursor:pointer;font-size:.82rem;color:#26529E;font-weight:700">Ver transcripción</summary>
+      <div class="meta" style="margin-top:.5rem;line-height:1.5">${escaparHTML(n.transcripcion)}</div>
+      <button class="btn-voz cancelar" style="margin-top:.5rem" onclick="corregirTranscripcion()">✎ Corregir y volver a analizar</button>`;
+    document.getElementById("caja-transcripcion-nota").appendChild(det);
+  }
+
   mostrarRevision();
   ficha.scrollTop = 0;
 }
